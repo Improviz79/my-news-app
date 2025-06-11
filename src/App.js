@@ -181,4 +181,193 @@ const TimelineView = ({ articles }) => {
         <div className="p-4 bg-gray-50 rounded-lg shadow-inner">
             <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center"><Clock className="mr-2 text-indigo-500"/>통합 주제 히스토리</h2>
             <div className="relative">
-                {sortedArticles.len
+                {sortedArticles.length > 0 ? sortedArticles.map((article, index) => (<TimelineNode key={article.id} article={article} isLast={index === sortedArticles.length - 1} />)) : <p className="text-center text-gray-500 py-10">표시할 히스토리 기사가 없습니다.</p>}
+            </div>
+        </div>
+    );
+};
+
+const MailSettings = ({ onSend }) => {
+    const [recipient, setRecipient] = useState('');
+    const [frequency, setFrequency] = useState('daily');
+    return (
+        <div className="bg-white p-4 rounded-lg shadow-md">
+            <h2 className="text-lg font-bold mb-3 text-gray-700 flex items-center"><Mail className="mr-2" />메일 발송 설정</h2>
+            <div className="space-y-3">
+                <input type="email" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="수신자 이메일 주소" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-400"/>
+                <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="w-full p-2 border rounded-md bg-white">
+                    <option value="daily">매일</option>
+                    <option value="weekly">매주</option>
+                    <option value="monthly">매월</option>
+                </select>
+                <button onClick={() => onSend(recipient, frequency)} className="w-full p-2 bg-teal-500 text-white rounded-md hover:bg-teal-600 transition flex items-center justify-center gap-2"><Send size={16} /> 설정 저장 및 테스트 발송</button>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">* 실제 서비스에서는 설정된 주기에 따라 요약된 뉴스 리포트를 메일로 자동 발송합니다.</p>
+        </div>
+    );
+};
+
+const LoadingSpinner = () => (
+    <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500"></div>
+    </div>
+);
+
+const App = () => {
+  const [keywords, setKeywords] = useState(["인공지능", "부동산 정책"]);
+  const [sourceUrls, setSourceUrls] = useState(["https://news.naver.com", "https://www.chosun.com", "https://www.joongang.co.kr"]);
+  const [searchPeriod, setSearchPeriod] = useState('1w');
+  const [searchResults, setSearchResults] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
+  const [openSimilarGroups, setOpenSimilarGroups] = useState({});
+  const [collapsedKeywords, setCollapsedKeywords] = useState({});
+  const [showModal, setShowModal] = useState(false);
+  const [modalContent, setModalContent] = useState({title: '', message: ''});
+
+  const displayModal = (shouldShow) => {
+    setShowModal(shouldShow);
+  };
+
+  const handleSearch = useCallback(() => {
+    if (keywords.length === 0) {
+      setSearchResults({});
+      return;
+    }
+    setIsLoading(true);
+    setSearchResults({}); 
+    console.log("검색 실행. 대상 URL:", sourceUrls, "기간:", searchPeriod);
+
+    setTimeout(() => {
+      const allResults = {};
+      keywords.forEach(keyword => {
+        const resultsForKeyword = MOCK_NEWS_DATA[keyword] || [];
+        const groupedResults = resultsForKeyword.reduce((acc, article) => {
+          const key = article.group;
+          if (!acc[key]) {
+            acc[key] = [];
+          }
+          acc[key].push(article);
+          return acc;
+        }, {});
+        allResults[keyword] = Object.values(groupedResults);
+      });
+      
+      setSearchResults(allResults);
+      setIsLoading(false);
+      setCollapsedKeywords({});
+    }, 1000);
+  }, [keywords, sourceUrls, searchPeriod]);
+
+  useEffect(() => {
+    handleSearch();
+  }, [keywords, handleSearch]);
+
+  const handleSendMail = (recipient, frequency) => {
+    if (!recipient) {
+      setModalContent({ title: '오류', message: '메일을 받을 사람의 주소를 입력해주세요.' });
+      setShowModal(true);
+      return;
+    }
+    setModalContent({ title: '메일 발송', message: `${recipient} 주소로 테스트 메일이 성공적으로 발송되었습니다. 실제 서비스에서는 '${frequency}' 주기로 리포트가 발송됩니다.` });
+    setShowModal(true);
+  };
+  
+  const toggleSimilarGroup = (groupId) => {
+    setOpenSimilarGroups(prev => ({...prev, [groupId]: !prev[groupId]}));
+  };
+
+  const toggleKeywordSection = (keyword) => {
+    setCollapsedKeywords(prev => ({...prev, [keyword]: !prev[keyword]}));
+  };
+
+  const allArticlesForTimeline = useMemo(() => {
+    return Object.values(searchResults).flat(2);
+  }, [searchResults]);
+
+  return (
+    <div className="bg-gray-100 min-h-screen font-sans text-gray-800">
+      <header className="bg-white shadow-sm sticky top-0 z-20">
+        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-indigo-600">NewsFlow</h1>
+            <div className="flex items-center gap-2">
+                <Tooltip text="즐겨찾기"><button className="p-2 rounded-full hover:bg-gray-200 transition"><Star className="text-gray-600" /></button></Tooltip>
+                <Tooltip text="메일 설정"><button className="p-2 rounded-full hover:bg-gray-200 transition"><Mail className="text-gray-600" /></button></Tooltip>
+            </div>
+        </div>
+      </header>
+      <main className="container mx-auto p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <aside className="lg:col-span-1 space-y-6">
+            <KeywordManager keywords={keywords} setKeywords={setKeywords} />
+            <SourceUrlManager sourceUrls={sourceUrls} setSourceUrls={setSourceUrls} showModal={displayModal} setModalContent={setModalContent} />
+            <SearchOptions searchPeriod={searchPeriod} setSearchPeriod={setSearchPeriod} onSearch={handleSearch} />
+            <MailSettings onSend={handleSendMail} />
+          </aside>
+          <div className="lg:col-span-3">
+            <div className="bg-white p-4 rounded-lg shadow-md min-h-[60vh]">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-800">전체 키워드 검색 결과</h2>
+                    <div className="flex gap-2">
+                        <button onClick={() => setViewMode('list')} className={`px-4 py-2 rounded-md text-sm font-semibold ${viewMode === 'list' ? 'bg-indigo-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}>리스트 보기</button>
+                        <button onClick={() => setViewMode('timeline')} className={`px-4 py-2 rounded-md text-sm font-semibold ${viewMode === 'timeline' ? 'bg-indigo-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}>히스토리 보기</button>
+                    </div>
+                </div>
+                {isLoading ? <LoadingSpinner /> : (
+                    <>
+                        {viewMode === 'list' && (
+                            <div className="space-y-6">
+                                {Object.keys(searchResults).length > 0 ? Object.entries(searchResults).map(([keyword, groups]) => {
+                                    const isCollapsed = collapsedKeywords[keyword];
+                                    const representativeArticles = groups.map(group => group.find(a => a.isRepresentative) || group[0]);
+                                    return (
+                                        <div key={keyword} className="border-t pt-4">
+                                            <button onClick={() => toggleKeywordSection(keyword)} className="w-full flex justify-between items-center text-left mb-3">
+                                                <h3 className="text-2xl font-semibold text-indigo-700">{keyword}</h3>
+                                                {isCollapsed ? <ChevronDown size={24} /> : <ChevronUp size={24} />}
+                                            </button>
+                                            {!isCollapsed && (
+                                                <div className="space-y-4">
+                                                    {representativeArticles.length > 0 ? representativeArticles.map(article => {
+                                                        const group = groups.find(g => g.includes(article));
+                                                        const similarArticles = group.filter(a => a.id !== article.id);
+                                                        const isSimilarOpen = openSimilarGroups[article.group];
+                                                        return (
+                                                            <div key={article.id}>
+                                                                <NewsCard article={article} onToggleSimilar={() => toggleSimilarGroup(article.group)} similarCount={similarArticles.length} />
+                                                                {isSimilarOpen && (
+                                                                    <div className="mt-2 space-y-2">
+                                                                        {similarArticles.map(sim => <SimilarArticleItem key={sim.id} article={sim} />)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }) : <p className="text-gray-500">검색 결과가 없습니다.</p>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                }) : <p className="text-center text-gray-500 py-10">검색된 결과가 없습니다. 키워드를 추가하고 검색을 실행해주세요.</p>}
+                            </div>
+                        )}
+                        {viewMode === 'timeline' && <TimelineView articles={allArticlesForTimeline} />}
+                    </>
+                )}
+            </div>
+          </div>
+        </div>
+      </main>
+      {showModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
+                    <h3 className="text-lg font-bold mb-4">{modalContent.title}</h3>
+                    <p className="text-gray-700 mb-6">{modalContent.message}</p>
+                    <button onClick={() => setShowModal(false)} className="w-full bg-indigo-500 text-white p-2 rounded-md hover:bg-indigo-600 transition">확인</button>
+                </div>
+            </div>
+        )}
+    </div>
+  );
+};
+
+export default App;
